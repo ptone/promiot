@@ -33,6 +33,7 @@ type Promiot struct {
 	defaultLabels         prometheus.Labels
 	startTime             time.Time
 	startGauge            *prometheus.GaugeVec
+	PublishDelay          int64
 }
 
 func NewPromiot(client mqtt.Client, topic string, defaultLabels map[string]string) (p *Promiot, err error) {
@@ -52,15 +53,17 @@ func NewPromiot(client mqtt.Client, topic string, defaultLabels map[string]strin
 	}
 	p.acktimer = make(map[uint16]int64)
 	p.ackDurationsHistogram = prometheus.NewHistogramVec(prometheus.HistogramOpts{
-		Name: "mqtt_telemetry_puback_latency",
-		// Help:    "MQTT ack latency distributions.",
+		Name:    "mqtt_telemetry_puback_latency",
+		Help:    "MQTT ack latency distributions.",
 		Buckets: prometheus.LinearBuckets(50, 20, 20),
 	}, labelKeys)
 	p.startGauge = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "promiot_relay_start_unix",
+		Help: "help todo",
 	}, labelKeys)
 	p.registry.MustRegister(p.ackDurationsHistogram, p.startGauge)
 	p.startGauge.With(defaultLabels).Set(float64(p.startTime.Unix()))
+	p.PublishDelay = 60
 	return p, nil
 }
 

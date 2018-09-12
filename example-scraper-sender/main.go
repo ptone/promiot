@@ -25,7 +25,7 @@ var (
 		port *string
 	}{
 		flag.String("mqtt_host", "mqtt.googleapis.com", "MQTT Bridge Host"),
-		flag.String("mqtt_port", "8883", "MQTT Bridge Port"),
+		flag.String("mqtt_port", "443", "MQTT Bridge Port"),
 	}
 	projectID  = flag.String("project", "", "GCP Project ID")
 	registryID = flag.String("registry", "", "Cloud IoT Registry ID (short form)")
@@ -120,6 +120,8 @@ func main() {
 	labels := map[string]string{
 		// https://en.wikipedia.org/wiki/ISO_3166-2:US
 		"location": "US-CA",
+		// Replace with a device ID
+		"instance": deviceID,
 	}
 	p, _ := promiot.NewPromiot(client, fmt.Sprintf("%s/metrics", topic.telemetry), labels)
 
@@ -128,12 +130,12 @@ func main() {
 		prometheus.GathererFunc(func() ([]*dto.MetricFamily, error) { return promiot.FetchMetricFamilies(scrapeURL) }),
 	}
 
-	// replace with promiot schedule
 	for {
 		log.Printf("[main] Publishing Message #%d", 0)
 		p.Publish()
-		time.Sleep(time.Second * 2)
+		time.Sleep(time.Second * p.PublishDelay)
 	}
+
 	log.Println("[main] MQTT Client Disconnecting")
 	client.Disconnect(250)
 	log.Println("[main] Done")
