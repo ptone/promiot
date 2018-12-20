@@ -2,7 +2,6 @@ package promiot
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"time"
 
@@ -13,8 +12,9 @@ import (
 	"cloud.google.com/go/pubsub"
 )
 
+// PromiotReceiver combines pubsub topic with a gatherable cache of received metrics
+// implements the prometheus.Gatherer interface
 type PromiotReceiver struct {
-	// registry TODO for metadata
 	received            map[string]*MetricBundle
 	client              *pubsub.Client
 	sub                 *pubsub.Subscription
@@ -22,6 +22,7 @@ type PromiotReceiver struct {
 	recLatencyHistogram *prometheus.HistogramVec
 }
 
+// NewPromiotReceiver - constructor
 func NewPromiotReceiver(project string, subscription string) *PromiotReceiver {
 	r := &PromiotReceiver{}
 	r.ctx = context.Background()
@@ -37,30 +38,32 @@ func NewPromiotReceiver(project string, subscription string) *PromiotReceiver {
 		Help:    "MQTT + Pubsub latency distributions.",
 		Buckets: prometheus.LinearBuckets(0.05, 0.05, 20),
 	},
-		[]string{"device", "location"})
+		// TODO will continue to investigate ways to convey the device location as a label
+		// []string{"device", "location"})
+
+		[]string{"instance"})
 	prometheus.MustRegister(r.recLatencyHistogram)
 	return r
 }
 
+// Receive - uses cloud pubsub streaming pull to receive metrics over telemetry and decode
 func (r *PromiotReceiver) Receive() {
 	err := r.sub.Receive(r.ctx, func(ctx context.Context, msg *pubsub.Message) {
 		log.Println("message rec")
 		bundle := &MetricBundle{}
 		err := proto.Unmarshal(msg.Data, bundle)
 		if err != nil {
-			log.Fatal("unmarshaling error: ", err)
+
+			log.Println("unmarshaling error: ", err)
+			msg.Ack()
+			return
+
 		}
 		// fmt.Println(bundle.BundleTimestamp)
 		sendTime := time.Unix(0, bundle.BundleTimestamp)
 		recLatency := time.Since(sendTime).Seconds()
-		fmt.Println("overall")
-		fmt.Println(sendTime)
-		fmt.Println(recLatency)
-		fmt.Println("publish")
-		fmt.Println(msg.PublishTime)
-		fmt.Println(time.Since(msg.PublishTime))
-		r.recLatencyHistogram.WithLabelValues("foo", "bar").Observe(recLatency)
-		fmt.Println(len(msg.Data))
+		r.recLatencyHistogram.WithLabelValues(msg.Attributes["deviceId"]).Observe(recLatency)
+		// r.recLatencyHistogram.WithLabelValues("foo", "bar").Observe(recLatency)
 		if len(bundle.Families) > 0 {
 			r.received[msg.Attributes["deviceNumId"]] = bundle
 			// fmt.Printf("%v\n", bundle.Families[0])
@@ -72,20 +75,12 @@ func (r *PromiotReceiver) Receive() {
 	}
 }
 
+// Gather : Implement the prometheus "Gather" interface
 func (r *PromiotReceiver) Gather() ([]*dto.MetricFamily, error) {
 	var allFamilies []*dto.MetricFamily
 	for _, v := range r.received {
-		// TODO consider injecting label per sender
-		// this would increase cardinality - but preserve sums across otherwise similar
-		// metrics such as counters or distributions which were not instrumented as vectors
-		// with labels from the source.
-		// for point source cardinality - this is easy - the source should basically
-		// ship the "instance" tag explicitly, it is harder for intermediate cardinality
-		// such as latency by region. The proper solution is likely to enforce high
-		// cardinality, then federate an aggreation to a user-facing prometheus using
-		// prometheus federation feature
 		allFamilies = append(allFamilies, v.Families...)
 	}
-	// TODO reset after gather?
+	// TODO consider reset after gather? At this point stale metrics will linger in the received data structure
 	return allFamilies, nil
 }
