@@ -1,7 +1,6 @@
 package promiot
 
 import (
-	"fmt"
 	"log"
 	"time"
 
@@ -53,7 +52,7 @@ func NewPromiot(client mqtt.Client, topic string, defaultLabels map[string]strin
 	}
 	p.acktimer = make(map[uint16]int64)
 	p.ackDurationsHistogram = prometheus.NewHistogramVec(prometheus.HistogramOpts{
-		Name:    "mqtt_telemetry_puback_latency",
+		Name:    "promiot_mqtt_telemetry_puback_latency",
 		Help:    "MQTT ack latency distributions.",
 		Buckets: prometheus.LinearBuckets(50, 20, 20),
 	}, labelKeys)
@@ -67,6 +66,10 @@ func NewPromiot(client mqtt.Client, topic string, defaultLabels map[string]strin
 	return p, nil
 }
 
+func (p *Promiot) MustRegister(cs ...prometheus.Collector) {
+	p.registry.MustRegister(cs...)
+}
+
 func (p *Promiot) Publish() (err error) {
 	mfs, err := p.Gatherer.Gather()
 	if len(mfs) == 0 {
@@ -75,12 +78,11 @@ func (p *Promiot) Publish() (err error) {
 		// need at least one metric other than self metric latency histo
 		// return nil
 	}
-	log.Println("gathered")
 	if err != nil {
 		return err
 	}
 	bundle := &MetricBundle{Families: mfs, BundleTimestamp: time.Now().UnixNano()}
-	fmt.Println(bundle.BundleTimestamp)
+	// fmt.Println(bundle.BundleTimestamp)
 	// fmt.Printf("%v\n", bundle.Families[0])
 
 	data, err := proto.Marshal(bundle)
@@ -102,8 +104,3 @@ func (p *Promiot) Publish() (err error) {
 	p.ackDurationsHistogram.With(p.defaultLabels).Observe(v)
 	return nil
 }
-
-// functions:
-// register
-// publish
-// schedule, repeating
