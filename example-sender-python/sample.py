@@ -12,7 +12,8 @@ def process_request(t):
   time.sleep(t)
 
 if __name__ == '__main__':
-  # Start up the server 
+  # Start up the server as is typically done for prometheus client scraping
+  # the local metrics will be scraped and sent via Cloud IoT Core
   start_http_server(9090)
   # Generate some requests.
   while True:

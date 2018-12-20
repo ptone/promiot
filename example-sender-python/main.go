@@ -73,7 +73,7 @@ func main() {
 
 	opts.SetUsername("unused")
 
-	// TODO set up token refresh
+	// TODO set up token refresh - currently this will expire after 24 hours
 	token := jwt.New(jwt.SigningMethodES256)
 	token.Claims = jwt.StandardClaims{
 		Audience:  *projectID,
@@ -88,7 +88,6 @@ func main() {
 	}
 
 	log.Println("[main] Parse Private Key")
-	// key, err := jwt.ParseRSAPrivateKeyFromPEM(keyBytes)
 	key, err := jwt.ParseECPrivateKeyFromPEM(keyBytes)
 	if err != nil {
 		log.Fatal(err)
@@ -121,7 +120,10 @@ func main() {
 		// https://en.wikipedia.org/wiki/ISO_3166-2:US
 		"location": "US-CA",
 		// Replace with a device ID
-		"instance": deviceID,
+		// TODO use env variable for device id label
+		// can default to instance, but then need honor labels
+		// config set in prometheus config
+		"instance": *deviceID,
 	}
 	p, _ := promiot.NewPromiot(client, fmt.Sprintf("%s/metrics", topic.telemetry), labels)
 
@@ -133,7 +135,7 @@ func main() {
 	for {
 		log.Printf("[main] Publishing Message #%d", 0)
 		p.Publish()
-		time.Sleep(time.Second * p.PublishDelay)
+		time.Sleep(time.Second * time.Duration(p.PublishDelay))
 	}
 
 	log.Println("[main] MQTT Client Disconnecting")
